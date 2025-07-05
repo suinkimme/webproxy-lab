@@ -23,3 +23,4 @@ int main(int argc, char **argv) {
   Close(clientfd);
   exit(0);
 }
+// 쇼트카운트 = 받고 싶은 내용이 있는데 그거보다 작은 데이터를 받았을 때
