@@ -14,8 +14,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
-void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
-                 char *longmsg);
+void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 
 int main(int argc, char **argv)
 {
@@ -56,8 +55,8 @@ void doit(int fd) {
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
 
-  Rio_readinitb(&rio, fd);
-  Rio_readlineb(&rio, buf, MAXLINE);
+  Rio_readinitb(&rio, fd); // 버퍼링된 구조체에 fd를 연결해서 버퍼링된 읽기 기능을 초기화함
+  Rio_readlineb(&rio, buf, MAXLINE); // 한 줄 읽어서 buf에 저장함, 이 줄은 보통 HTTP 요청 첫 줄 GET /index.html HTTP/1.1이 됨
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
@@ -66,15 +65,22 @@ void doit(int fd) {
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement thie method");
     return;
   }
-  read_requesthdrs(&rio);
+  read_requesthdrs(&rio); // 이후에 오는 HTTP 헤더들을 줄 단위로 읽고 출력만 함
 
   is_static = parse_uri(uri, filename, cgiargs);
+  // stat은 파일에 대한 정보를 얻기 위함 함수임
+  // filename 경로의 파일 정보가 sbuf에 채워짐
+  // 실패하면 파일이 존재하지 않거나 접근 불가능하다는 뜻
   if (stat(filename, &sbuf) < 0) {
     clienterror(fd, filename, "404", "Not found", "Tiny couldn't find this file");
     return;
   }
 
   if (is_static) {
+    // S_ISREG는 이 파일이 일반 파일(regular file)인지 확인하는 매크로
+    // 텍스트, html 같은 파일은 regular file임
+    
+    // S_ISUSR은 파일 소유자(read)의 권한이 있는지를 비트 연산으로 확인함
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
       return;
@@ -82,6 +88,7 @@ void doit(int fd) {
 
     serve_static(fd, filename, sbuf.st_size);
   } else {
+    // S_IXUSR은 실행 권한이 있는지를 비트 연산으로 확인하는 거임
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't run the CGI program");
       return;
@@ -109,6 +116,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
   Rio_writen(fd, body, strlen(body));
 }
 
+// 클라이언트가 보낸 요청에서 "요청 라인" "헤더"를 읽기 위한 함수임
 void read_requesthdrs(rio_t *rp) {
   char buf[MAXLINE];
 
@@ -124,10 +132,16 @@ void read_requesthdrs(rio_t *rp) {
 int parse_uri(char *uri, char *filename, char *cgiargs) {
   char *ptr;
 
+  // strstr은 문자열 안에 특정 문자열이 있는지 확인하는 함수다.
+  // cgi-bin이 있으면 CGI 실행 파일 요청 즉, 동적 컨텐츠다.
   if (!strstr(uri, "cgi-bin")) {
+    // 함수들을 거치면 uri가 /index.html이라면
+    // filename은 ./index.html이 됨
     strcpy(cgiargs, "");
     strcpy(filename, ".");
     strcat(filename, uri);
+
+    // 만약 /로 끝나는 uri라면 default 파일을 지정해주는 거임
     if (uri[strlen(uri) - 1] == '/') {
       strcat(filename, "home.html");
     }
