@@ -23,7 +23,6 @@ int main(int argc, char **argv)
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
 
-  /* Check command line args */
   if (argc != 2)
   {
     fprintf(stderr, "usage: %s <port>\n", argv[0]);
@@ -134,6 +133,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
 
   // strstr은 문자열 안에 특정 문자열이 있는지 확인하는 함수다.
   // cgi-bin이 있으면 CGI 실행 파일 요청 즉, 동적 컨텐츠다.
+  // CGI란? 실제로 그 파일을 실행시키고 그 실행 결과(출력)을 클라이언트에게 보내는 방식이다.
   if (!strstr(uri, "cgi-bin")) {
     // 함수들을 거치면 uri가 /index.html이라면
     // filename은 ./index.html이 됨
@@ -161,25 +161,28 @@ int parse_uri(char *uri, char *filename, char *cgiargs) {
   }
 }
 
+// 정적 콘텐츠(HTML, 텍스트, 이미지)를 클라이언트에게 HTTP 응답 형식으로 전송하는 함수임
 void serve_static(int fd, char *filename, int filesize) {
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
   get_filetype(filename, filetype);
+  // HTTP 응답 헤더를 만들기
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sConnection: close\r\n", buf);
   sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
-  Rio_writen(fd, buf, strlen(buf));
+  Rio_writen(fd, buf, strlen(buf)); // 응답 헤더를 문자열로 작성된걸 클라이언트에게 전송함
+
   printf("Response headers: \n");
   printf("%s", buf);
 
-  srcfd = Open(filename, O_RDONLY, 0);
-  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0);
+  srcfd = Open(filename, O_RDONLY, 0); // Open으로 해당 파일을 읽기 전용으로 염
+  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); // Mmap로 파일 전체를 가상 메모리(주소 공간)에 매핑함, 즉 파일 내용을 읽지 않고도 포인터처럼 접근 가능함, 더 빠르고 효율적임
   Close(srcfd);
-  Rio_writen(fd, srcp, filesize);
-  Munmap(srcp, filesize);
+  Rio_writen(fd, srcp, filesize); // 매핑된 메모리 내용을 클라이언트에게 전송
+  Munmap(srcp, filesize); // 가상 메모리 해제
 }
 
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
