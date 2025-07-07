@@ -185,6 +185,14 @@ void serve_static(int fd, char *filename, int filesize) {
   Munmap(srcp, filesize); // 가상 메모리 해제
 }
 
+// 여기서 말하는 동적 요청은 Tiny 웹 서버가 특정 프로그램(CGI 스크립트)을 실행해서 그 결과를 클라이언트에 보내는 요청이다.
+// 예를 들어 adder.cgi?1&2 요청이 오면 adder.cgi 프로그램을 실행하고 그 안에서 1, 2를 받아서 처리한 뒤 결과를 HTML 형식으로 출력한다.
+/*
+→ Tiny는 adder.cgi라는 프로그램을 실행하고
+→ QUERY_STRING=1&2를 환경변수로 넣어줌
+→ 프로그램 안에서 getenv("QUERY_STRING") 해서 값 파싱 후 계산
+→ 결과를 printf() 하면 그대로 웹 브라우저에 출력됨
+*/
 void serve_dynamic(int fd, char *filename, char *cgiargs) {
   char buf[MAXBUF], *emptylist[] = { NULL };
 
@@ -193,12 +201,24 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
   sprintf(buf, "Server: Tiny Web Server\r\n");
   Rio_writen(fd, buf, strlen(buf));
 
+  // 자식 프로세스에서 CGI 프로그램을 실행한다.
+  // 자식 프로세스 생성
   if (Fork() == 0) {
+    // 환경 변수 설정
+    // CGI 프로그램이 getenv("QUERY_STING")으로 GET 파라미터를 읽을 수 있게 해줌
+    // 예: adder.cgi?1&2 -> cgiargs = "1&2" -> 환경 변수 QUERY_STRING=1&2
     setenv("QUERY_STRING", cgiargs, 1);
+
+    // 자식 프로세스의 표준 출력(STDOUT)을 소켓(fd)으로 리디렉션
+    // 즉 CGI 프로그램이 printf() 하면 그 출력이 브라우저로 바로 전송됨
     Dup2(fd, STDOUT_FILENO);
+
+    // CGI 프로그램 실행 (예: adder.cgi)
+    // 해당 실행 파일을 그대로 실행함(emptylist는 argv 없음)
     Execve(filename, emptylist, environ);
   }
   
+  // 부모 프로세스는 자식 프로세스가 끝날 때까지 기다림
   Wait(NULL);
 }
 
