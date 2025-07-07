@@ -20,7 +20,7 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
 int main(int argc, char **argv)
 {
   int listenfd, connfd;
-  char hostname[MAXLINE], port[MAXLINE];
+  char hostname[MAXLINE], port[MAXLINE]; // C에서는 문자열의 길이를 미리 정해진 크기의 배열에 저장해야 하니까, 안전하게 사용할 수 있도록 MAXLINE 처럼 상수를 만들어둔다.
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
 
@@ -32,16 +32,20 @@ int main(int argc, char **argv)
   }
 
   listenfd = Open_listenfd(argv[1]);
+  // Tiny 웹 서버가 멈추지 않고 클라이언트의 요청을 기다리기 위해 필요한 구조다.
+  // 웹 서버는 일반적으로 한 번 실행되면 계속 대기하다 요청이 오면 처리를 반복한다.
   while (1)
   {
     clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr,
-                    &clientlen); // line:netp:tiny:accept
+    // 클라이언트가 접속하면 연결을 수락하고 통신할 소켓을 만든다.
+    connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); // 여기서 생성된 소켓은 1:1 통신에만 사용된다.
     Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
                 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
-    doit(connfd);  // line:netp:tiny:doit
-    Close(connfd); // line:netp:tiny:close
+    // 그 요청을 처리한다.
+    doit(connfd);
+    // 요청 처리 후 소켓을 닫고 처음으로 돌아가서 다음 요청을 기다린다.
+    Close(connfd); // Tiny 서버 자체는 종료되는 게 아니다. 닫는 것은 해당 클라이언트와의 연결만 종료하는 것이다.
   }
 }
 
